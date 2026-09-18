@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Last Village</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #0d1117;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+  #gameWrap {
+    position: relative;
+    width: 960px; height: 640px;
+    margin: 20px auto 0;
+  }
+  canvas#game {
+    display: block;
+    background: #1b2a1f;
+    border: 2px solid #3a4a3d;
+    border-radius: 6px;
+    cursor: crosshair;
+  }
+  #title {
+    text-align: center;
+    color: #e8e6d9;
+    font-size: 22px;
+    letter-spacing: 2px;
+    padding: 12px 0 4px;
+    text-shadow: 0 0 8px rgba(200,180,100,0.4);
+  }
+
+  /* HUD */
+  #hud {
+    position: absolute;
+    top: 10px; left: 10px; right: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    pointer-events: none;
+    font-size: 15px;
+    color: #f0ead6;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  }
+  .hudBox {
+    background: rgba(10, 14, 10, 0.55);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    padding: 8px 14px;
+  }
+  #goldBox { color: #ffd75e; font-weight: bold; }
+  #timerBox { font-variant-numeric: tabular-nums; font-weight: bold; }
+  #coreBox { min-width: 180px; }
+  #coreHpOuter {
+    width: 160px; height: 10px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 5px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+  #coreHpFill {
+    height: 100%;
+    background: linear-gradient(90deg, #4caf50, #8bc34a);
+    width: 100%;
+    transition: width 0.2s ease;
+  }
+
+  /* Legend */
+  #legend {
+    position: absolute;
+    bottom: 14px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(10, 14, 10, 0.65);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    padding: 10px 18px;
+    color: #eee;
+    font-size: 13px;
+    line-height: 1.6;
+    text-align: center;
+    pointer-events: none;
+    transition: opacity 0.8s ease;
+  }
+  #legend.faded { opacity: 0; }
+
+  /* Flash messages */
+  #flash {
+    position: absolute;
+    top: 70px; left: 50%;
+    transform: translateX(-50%);
+    color: #ff8a80;
+    background: rgba(20,10,10,0.7);
+    border: 1px solid rgba(255,120,120,0.4);
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+  #flash.show { opacity: 1; }
+
+  /* End screen */
+  #endScreen {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(5, 8, 5, 0.88);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+  }
+  #endScreen.hidden { display: none; }
+  #endPanel {
+    background: #171f18;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px;
+    padding: 32px 46px;
+    text-align: center;
+    color: #f0ead6;
+    min-width: 320px;
+  }
+  #endTitle {
+    font-size: 26px;
+    margin-bottom: 14px;
+    letter-spacing: 1px;
+  }
+  #endTitle.won { color: #8bc34a; }
+  #endTitle.lost { color: #e57373; }
+  .statLine {
+    font-size: 15px;
+    margin: 4px 0;
+    color: #cfcabb;
+  }
+  .statLine b { color: #ffd75e; }
+  #restartBtn {
+    margin-top: 20px;
+    padding: 10px 28px;
+    font-size: 15px;
+    background: #3d7a3d;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    pointer-events: auto;
+  }
+  #restartBtn:hover { background: #4a924a; }
+</style>
+</head>
+<body>
+
+<div id="title">THE LAST VILLAGE</div>
+<div id="gameWrap">
+  <canvas id="game" width="960" height="640"></canvas>
+
+  <div id="hud">
+    <div class="hudBox" id="goldBox">Gold: <span id="goldVal">20</span></div>
+    <div class="hudBox" id="coreBox">
+      Town Core
+      <div id="coreHpOuter"><div id="coreHpFill"></div></div>
+    </div>
+    <div class="hudBox" id="timerBox"><span id="timerVal">10:00</span></div>
+  </div>
+
+  <div id="flash"></div>
+
+  <div id="legend">
+    <b>WASD</b> move &nbsp;·&nbsp; <b>Mouse</b> aim &nbsp;·&nbsp; <b>Left-click</b> shoot / repair / upgrade &nbsp;·&nbsp; <b>Right-click</b> build tower
+  </div>
+
+  <div id="endScreen" class="hidden">
+    <div id="endPanel">
+      <div id="endTitle"></div>
+      <div class="statLine">Time survived: <b id="statTime"></b></div>
+      <div class="statLine">Enemies defeated: <b id="statKills"></b></div>
+      <div class="statLine">Gold earned: <b id="statGold"></b></div>
+      <button id="restartBtn">Play Again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ===================== 1. CONSTANTS =====================
+  const CANVAS_W = 960, CANVAS_H = 640;
+  const TOWN_CENTER = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
+  const TOWN_BUILD_RADIUS = 260;
+
+  const PROJECTILE_SPEED = 600;
+  const WIN_TIME = 600; // seconds (10:00)
+
+  const TOWER_BUILD_COST = 40;
+  const MAX_TOWERS = 6;
+  const TOWER_MAX_LEVEL = 3;
+
+  const FORGE_MAX_LEVEL = 5;
+
+  const CORE_REPAIR_COST = 25;
+  const CORE_REPAIR_HEAL = 75;
+
+  // Update once CONFIG is defined below
+  const ENEMY_BASE = {
+    fast:   { hp: 20, speed: 110, damage: 5,  goldRange: [3, 5],   radius: 10 },
+    strong: { hp: 90, speed: 45,  damage: 18, goldRange: [10, 14], radius: 18 },
+  };
+  // Add colors after CONFIG is defined
+  ENEMY_BASE.fast.color = CONFIG.COLORS.ENEMY_FAST;
+  ENEMY_BASE.strong.color = CONFIG.COLORS.ENEMY_STRONG;
+
+  // ===================== CONFIG: Centralized Constants =====================
+  const CONFIG = {
+    // Colors
+    COLORS: {
+      ENEMY_FAST: '#7fd66b',
+      ENEMY_STRONG: '#c2555b',
+      CORE_FILL: '#8a6d3b',
+      CORE_STROKE: '#ffdd88',
+      FORGE_FILL: '#555a63',
+      FORGE_STROKE: '#ff9d4d',
+      TOWER_LVL1: '#4d78c2',
+      TOWER_LVL2: '#4d9dc2',
+      TOWER_LVL3: '#4dd2c2',
+      TOWER_STROKE: '#dfefff',
+      PLAYER_FILL: '#f4d35e',
+      PLAYER_STROKE: '#2b2b2b',
+      PROJECTILE_PLAYER: '#fff3b0',
+      PROJECTILE_TOWER: '#b0e0ff',
+      GOLD_FILL: '#ffd75e',
+      GOLD_STROKE: '#a37a12',
+      TEXT_PRIMARY: '#f0ead6',
+      HP_BAR_GOOD: '#7fd66b',
+      HP_BAR_BAD: '#e57373',
+      HP_BAR_BG: 'rgba(0,0,0,0.5)',
+    },
+    // Entity sizes
+    SIZES: {
+      PLAYER_RADIUS: 14,
+      ENEMY_SPAWN_MARGIN: 40,
+      PROJECTILE_RADIUS: 4,
+      TOWER_RADIUS_BASE: 14,
+      TOWER_RADIUS_PER_LEVEL: 2,
+      GOLD_DROP_RADIUS: 12,
+      GOLD_VISUAL_RADIUS: 0.6,
+      CORE_RADIUS: 30,
+      FORGE_RADIUS: 22,
+      FLAME_RADIUS: 5,
+    },
+    // HP bar rendering
+    HP_BARS: {
+      CORE_WIDTH: 60,
+      CORE_HEIGHT: 7,
+      CORE_Y_OFFSET: 16,
+      ENEMY_HEIGHT: 4,
+      ENEMY_Y_OFFSET: 8,
+      HEALTH_THRESHOLD: 0.4, // below this, color becomes red
+    },
+    // Animation timing
+    TIMING: {
+      PULSE_SPEED: 2,
+      PULSE_SCALE: 0.03,
+      FORGE_PULSE_OFFSET: 1,
+      FORGE_PULSE_SCALE: 0.04,
+      BOB_SPEED: 4,
+      BOB_AMOUNT: 2,
+    },
+    // Click detection tolerances
+    CLICK_TOLERANCE: {
+      CORE: 8,
+      FORGE: 8,
+      TOWER: 10,
+    },
+    // Building constraints
+    BUILDING: {
+      MIN_DISTANCE: 50,
+      SPAWN_INTERVAL_MIN: 0.5,
+      SPAWN_INTERVAL_MAX: 2.5,
+      SPAWN_INTERVAL_RAMP: 480, // time to reach minimum
+      DIFFICULTY_SCALE_TIME: 120, // time to double difficulty
+    },
+    // Line widths
+    LINES: {
+      CORE_STROKE: 3,
+      TOWER_STROKE: 2,
+      TOWER_RANGE_WIDTH: 1,
+      AIM_LINE_WIDTH: 2,
+    },
+    // Difficulty scaling
+    DIFFICULTY: {
+      HP_MULTIPLIER: 0.5, // enemies scale HP by this * difficulty
+      SPEED_MULTIPLIER: 0.15,
+      SPEED_CAP: 1.6, // max speed multiplier
+    },
+  };
+
+  // ===================== UPGRADES: Centralized Upgrade Configuration =====================
+  const UPGRADES = {
+    FORGE: {
+      MAX_LEVEL: 5,
+      BASE_DAMAGE: 12,
+      BASE_FIRE_RATE: 3,
+      DAMAGE_PER_LEVEL: 4,
+      FIRE_RATE_PER_LEVEL: 0.4,
+      COST: (level) => Math.floor(15 * Math.pow(1.5, level - 1)),
+      getStats: (level) => ({
+        damage: 12 + 4 * (level - 1),
+        fireRate: 3 + 0.4 * (level - 1),
+      }),
+    },
+    TOWER: {
+      MAX_LEVEL: 3,
+      BASE_DAMAGE: 10,
+      BASE_RANGE: 140,
+      BASE_FIRE_RATE: 1.5,
+      DAMAGE_PER_LEVEL: 8,
+      RANGE_PER_LEVEL: 20,
+      FIRE_RATE_PER_LEVEL: 0.5,
+      COST: (level) => Math.floor(30 * Math.pow(1.6, level)),
+      getStats: (level) => ({
+        damage: 10 + 8 * (level - 1),
+        range: 140 + 20 * (level - 1),
+        fireRate: 1.5 + 0.5 * (level - 1),
+      }),
+    },
+  };
+
+  // ===================== 2. GAME STATE =====================
+  let state = null;
+
+  function createInitialState() {
+    return {
+      status: 'playing', // 'playing' | 'won' | 'lost'
+      elapsed: 0,
+      gold: 20,
+      kills: 0,
+      goldEarned: 0,
+
+      player: {
+        x: TOWN_CENTER.x, y: TOWN_CENTER.y - 40,
+        radius: 14,
+        speed: 180,
+        aimAngle: 0,
+        weaponLevel: 1,
+        fireRate: 3,
+        damage: 12,
+        fireCooldown: 0,
+      },
+
+      keys: { w: false, a: false, s: false, d: false },
+      mouse: { x: TOWN_CENTER.x, y: TOWN_CENTER.y - 200 },
+
+      enemies: [],
+      projectiles: [],
+      goldDrops: [],
+      towers: [],
+
+      townCore: { x: TOWN_CENTER.x, y: TOWN_CENTER.y, hp: 500, maxHp: 500, radius: 30 },
+      forge: { x: TOWN_CENTER.x + 90, y: TOWN_CENTER.y - 60, level: 1, radius: 22 },
+
+      spawnTimer: 1.5,
+    };
+  }
+
+  // ===================== helpers =====================
+  function dist(x1, y1, x2, y2) { return Math.hypot(x1 - x2, y1 - y2); }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  // Collision helpers
+  function isCircleColliding(x1, y1, r1, x2, y2, r2) {
+    return dist(x1, y1, x2, y2) < r1 + r2;
+  }
+
+  function withinRadius(x, y, cx, cy, radius) {
+    return dist(x, y, cx, cy) <= radius;
+  }
+
+  // Entity helpers
+  function decreaseCooldown(obj, dt) {
+    if (obj.fireCooldown > 0) obj.fireCooldown -= dt;
+  }
+
+  function createProjectile(x, y, targetX, targetY, damage, owner) {
+    const dx = targetX - x, dy = targetY - y;
+    const d = Math.hypot(dx, dy) || 1;
+    return {
+      x, y,
+      vx: (dx / d) * PROJECTILE_SPEED,
+      vy: (dy / d) * PROJECTILE_SPEED,
+      damage, radius: CONFIG.SIZES.PROJECTILE_RADIUS, owner,
+    };
+  }
+
+  // Drawing helpers
+  function drawHpBar(x, y, currentHp, maxHp, width, height, lowHealthThreshold) {
+    const ratio = currentHp / maxHp;
+    ctx.fillStyle = CONFIG.COLORS.HP_BAR_BG;
+    ctx.fillRect(x - width / 2, y, width, height);
+    ctx.fillStyle = ratio > lowHealthThreshold ? CONFIG.COLORS.HP_BAR_GOOD : CONFIG.COLORS.HP_BAR_BAD;
+    ctx.fillRect(x - width / 2, y, width * ratio, height);
+  }
+
+  function drawFilledCircle(x, y, radius, fillColor, strokeColor, lineWidth) {
+    ctx.fillStyle = fillColor;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = lineWidth;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  let flashTimeout = null;
+  function flashMessage(msg) {
+    const el = document.getElementById('flash');
+    el.textContent = msg;
+    el.classList.add('show');
+    if (flashTimeout) clearTimeout(flashTimeout);
+    flashTimeout = setTimeout(() => el.classList.remove('show'), 1100);
+  }
+
+  function formatTime(t) {
+    const s = Math.max(0, Math.floor(t));
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return m + ':' + String(r).padStart(2, '0');
+  }
+
+  // ===================== 3. ENTITY FACTORIES =====================
+  // Difficulty increases over time: doubles every 120 seconds (enemy HP/speed scale)
+  function difficultyMultiplier(t) { return 1 + t / 120; }
+
+  // Spawn rate increases over time: interpolates from 2.5s to 0.5s over first 480s (8 minutes)
+  function currentSpawnInterval(t) {
+    const interval = 2.5 - 2.0 * Math.min(t / 480, 1);
+    return Math.max(0.5, interval);
+  }
+
+  function spawnEnemy(t) {
+    const margin = CONFIG.SIZES.ENEMY_SPAWN_MARGIN;
+    const side = Math.floor(Math.random() * 4);
+    let x, y;
+    if (side === 0)      { x = Math.random() * CANVAS_W; y = -margin; }
+    else if (side === 1) { x = CANVAS_W + margin; y = Math.random() * CANVAS_H; }
+    else if (side === 2) { x = Math.random() * CANVAS_W; y = CANVAS_H + margin; }
+    else                 { x = -margin; y = Math.random() * CANVAS_H; }
+
+    const isFast = Math.random() < 0.65;
+    const type = isFast ? 'fast' : 'strong';
+    const base = ENEMY_BASE[type];
+
+    const mult = difficultyMultiplier(t);
+    const hp = base.hp * (1 + 0.5 * (mult - 1));
+    const speed = Math.min(base.speed * (1 + 0.15 * (mult - 1)), base.speed * 1.6);
+    const goldValue = base.goldRange[0] + Math.floor(Math.random() * (base.goldRange[1] - base.goldRange[0] + 1));
+
+    state.enemies.push({
+      type, x, y,
+      hp, maxHp: hp, speed,
+      damage: base.damage,
+      radius: base.radius,
+      color: base.color,
+      damageCooldown: 0,
+      goldValue,
+    });
+  }
+
+  // ===================== 4. INPUT HANDLING =====================
+  const canvas = document.getElementById('game');
+
+  window.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (k === 'w' || k === 'a' || k === 's' || k === 'd') {
+      state.keys[k] = true;
+      dismissLegend();
+    }
+  });
+  window.addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    if (k === 'w' || k === 'a' || k === 's' || k === 'd') state.keys[k] = false;
+  });
+
+  function toCanvasCoords(evt) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = CANVAS_W / rect.width;
+    const scaleY = CANVAS_H / rect.height;
+    return {
+      cx: (evt.clientX - rect.left) * scaleX,
+      cy: (evt.clientY - rect.top) * scaleY,
+    };
+  }
+
+  canvas.addEventListener('mousemove', (evt) => {
+    const { cx, cy } = toCanvasCoords(evt);
+    state.mouse.x = cx;
+    state.mouse.y = cy;
+  });
+
+  canvas.addEventListener('click', (evt) => {
+    dismissLegend();
+    if (state.status !== 'playing') return;
+    const { cx, cy } = toCanvasCoords(evt);
+    if (tryHandleUpgradeClick(cx, cy)) return;
+    tryPlayerShoot();
+  });
+
+  canvas.addEventListener('contextmenu', (evt) => {
+    evt.preventDefault();
+    dismissLegend();
+    if (state.status !== 'playing') return;
+    const { cx, cy } = toCanvasCoords(evt);
+    tryBuildTower(cx, cy);
+  });
+
+  let legendDismissed = false;
+  function dismissLegend() {
+    if (legendDismissed) return;
+    legendDismissed = true;
+    document.getElementById('legend').classList.add('faded');
+  }
+  setTimeout(dismissLegend, 7000);
+
+  // ===================== 6. UPDATE LOGIC =====================
+  function updatePlayer(dt) {
+    const p = state.player;
+    let dx = 0, dy = 0;
+    if (state.keys.w) dy -= 1;
+    if (state.keys.s) dy += 1;
+    if (state.keys.a) dx -= 1;
+    if (state.keys.d) dx += 1;
+    if (dx !== 0 || dy !== 0) {
+      const len = Math.hypot(dx, dy);
+      p.x += (dx / len) * p.speed * dt;
+      p.y += (dy / len) * p.speed * dt;
+    }
+    p.x = clamp(p.x, p.radius, CANVAS_W - p.radius);
+    p.y = clamp(p.y, p.radius, CANVAS_H - p.radius);
+
+    p.aimAngle = Math.atan2(state.mouse.y - p.y, state.mouse.x - p.x);
+    if (p.fireCooldown > 0) p.fireCooldown -= dt;
+  }
+
+  function tryPlayerShoot() {
+    const p = state.player;
+    if (p.fireCooldown > 0) return;
+    state.projectiles.push(createProjectile(p.x, p.y, state.mouse.x, state.mouse.y, p.damage, 'player'));
+    p.fireCooldown = 1 / p.fireRate;
+  }
+
+  function updateEnemies(dt) {
+    for (const e of state.enemies) {
+      const dx = state.townCore.x - e.x, dy = state.townCore.y - e.y;
+      const d = Math.hypot(dx, dy);
+      const contactRange = state.townCore.radius + e.radius + 5;
+      if (d > contactRange) {
+        e.x += (dx / d) * e.speed * dt;
+        e.y += (dy / d) * e.speed * dt;
+      } else {
+        e.damageCooldown -= dt;
+        if (e.damageCooldown <= 0) {
+          state.townCore.hp = Math.max(0, state.townCore.hp - e.damage);
+          e.damageCooldown = 1.0;
+        }
+      }
+    }
+  }
+
+  function updateSpawning(dt) {
+    state.spawnTimer -= dt;
+    if (state.spawnTimer <= 0) {
+      spawnEnemy(state.elapsed);
+      state.spawnTimer = currentSpawnInterval(state.elapsed);
+    }
+  }
+
+  function killEnemy(index) {
+    const e = state.enemies[index];
+    state.goldDrops.push({ x: e.x, y: e.y, amount: e.goldValue, radius: 12 });
+    state.kills++;
+    state.enemies.splice(index, 1);
+  }
+
+  function updateProjectiles(dt) {
+    for (let i = state.projectiles.length - 1; i >= 0; i--) {
+      const proj = state.projectiles[i];
+      proj.x += proj.vx * dt; proj.y += proj.vy * dt;
+      if (proj.x < -20 || proj.x > CANVAS_W + 20 || proj.y < -20 || proj.y > CANVAS_H + 20) {
+        state.projectiles.splice(i, 1); continue;
+      }
+      for (let j = state.enemies.length - 1; j >= 0; j--) {
+        const e = state.enemies[j];
+        if (dist(proj.x, proj.y, e.x, e.y) < proj.radius + e.radius) {
+          e.hp -= proj.damage;
+          state.projectiles.splice(i, 1);
+          if (e.hp <= 0) killEnemy(j);
+          break;
+        }
+      }
+    }
+  }
+
+  function updateTowers(dt) {
+    for (const tw of state.towers) {
+      if (tw.fireCooldown > 0) tw.fireCooldown -= dt;
+      if (tw.fireCooldown > 0) continue;
+      let nearest = null, nearestDist = tw.range;
+      for (const e of state.enemies) {
+        const d = dist(e.x, e.y, tw.x, tw.y);
+        if (d <= nearestDist) { nearest = e; nearestDist = d; }
+      }
+      if (nearest) {
+        state.projectiles.push(createProjectile(tw.x, tw.y, nearest.x, nearest.y, tw.damage, 'tower'));
+        tw.fireCooldown = 1 / tw.fireRate;
+      }
+    }
+  }
+
+  function updateGoldPickups() {
+    const p = state.player;
+    for (let i = state.goldDrops.length - 1; i >= 0; i--) {
+      const g = state.goldDrops[i];
+      if (dist(p.x, p.y, g.x, g.y) <= 30) {
+        state.gold += g.amount;
+        state.goldEarned += g.amount;
+        state.goldDrops.splice(i, 1);
+      }
+    }
+  }
+
+  // ===================== 7. INTERACTION / UPGRADE LOGIC =====================
+  function tryHandleUpgradeClick(cx, cy) {
+    const core = state.townCore;
+    if (dist(cx, cy, core.x, core.y) <= core.radius + CONFIG.CLICK_TOLERANCE.CORE) return tryRepairCore();
+
+    const forge = state.forge;
+    if (dist(cx, cy, forge.x, forge.y) <= forge.radius + CONFIG.CLICK_TOLERANCE.FORGE) return tryUpgradeForge();
+
+    for (const tw of state.towers) {
+      const twRadius = CONFIG.SIZES.TOWER_RADIUS_BASE + tw.level * CONFIG.SIZES.TOWER_RADIUS_PER_LEVEL;
+      if (dist(cx, cy, tw.x, tw.y) <= twRadius + CONFIG.CLICK_TOLERANCE.TOWER) return tryUpgradeTower(tw);
+    }
+    return false;
+  }
+
+  function tryRepairCore() {
+    const core = state.townCore;
+    if (core.hp >= core.maxHp) { flashMessage('Core is at full health'); return true; }
+    if (state.gold < CORE_REPAIR_COST) { flashMessage('Not enough gold (need ' + CORE_REPAIR_COST + ')'); return true; }
+    state.gold -= CORE_REPAIR_COST;
+    core.hp = Math.min(core.maxHp, core.hp + CORE_REPAIR_HEAL);
+    flashMessage('Core repaired +' + CORE_REPAIR_HEAL + ' HP');
+    return true;
+  }
+
+  function tryUpgradeForge() {
+    const forge = state.forge;
+    if (forge.level >= UPGRADES.FORGE.MAX_LEVEL) { flashMessage('Weapon is max level'); return true; }
+    const cost = UPGRADES.FORGE.COST(forge.level);
+    if (state.gold < cost) { flashMessage('Not enough gold (need ' + cost + ')'); return true; }
+    state.gold -= cost;
+    forge.level++;
+    const p = state.player;
+    const stats = UPGRADES.FORGE.getStats(forge.level);
+    p.weaponLevel = forge.level;
+    p.damage = stats.damage;
+    p.fireRate = stats.fireRate;
+    flashMessage('Weapon upgraded to level ' + forge.level);
+    return true;
+  }
+
+  function tryUpgradeTower(tw) {
+    if (tw.level >= UPGRADES.TOWER.MAX_LEVEL) { flashMessage('Tower is max level'); return true; }
+    const cost = UPGRADES.TOWER.COST(tw.level);
+    if (state.gold < cost) { flashMessage('Not enough gold (need ' + cost + ')'); return true; }
+    state.gold -= cost;
+    tw.level++;
+    const stats = UPGRADES.TOWER.getStats(tw.level);
+    tw.damage = stats.damage;
+    tw.range = stats.range;
+    tw.fireRate = stats.fireRate;
+    flashMessage('Tower upgraded to level ' + tw.level);
+    return true;
+  }
+
+  function tryBuildTower(cx, cy) {
+    if (state.towers.length >= MAX_TOWERS) { flashMessage('Max towers reached (' + MAX_TOWERS + ')'); return; }
+    if (dist(cx, cy, state.townCore.x, state.townCore.y) > TOWN_BUILD_RADIUS) {
+      flashMessage('Too far from town to build'); return;
+    }
+    if (dist(cx, cy, state.townCore.x, state.townCore.y) < CONFIG.BUILDING.MIN_DISTANCE ||
+        dist(cx, cy, state.forge.x, state.forge.y) < CONFIG.BUILDING.MIN_DISTANCE) {
+      flashMessage('Too close to another building'); return;
+    }
+    for (const tw of state.towers) {
+      if (dist(cx, cy, tw.x, tw.y) < CONFIG.BUILDING.MIN_DISTANCE) { flashMessage('Too close to another tower'); return; }
+    }
+    if (state.gold < TOWER_BUILD_COST) { flashMessage('Not enough gold (need ' + TOWER_BUILD_COST + ')'); return; }
+    state.gold -= TOWER_BUILD_COST;
+    const towerStats = UPGRADES.TOWER.getStats(1);
+    state.towers.push({ x: cx, y: cy, level: 1, damage: towerStats.damage, range: towerStats.range, fireRate: towerStats.fireRate, fireCooldown: 0 });
+    flashMessage('Tower built');
+  }
+
+  // ===================== 8. RENDER LOGIC =====================
+  const ctx = canvas.getContext('2d');
+
+  function drawBackground() {
+    ctx.fillStyle = '#1b2a1f';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    // buildable area ring
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.setLineDash([6, 8]);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(TOWN_CENTER.x, TOWN_CENTER.y, TOWN_BUILD_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawCore(t) {
+    const core = state.townCore;
+    const pulse = 1 + Math.sin(t * CONFIG.TIMING.PULSE_SPEED) * CONFIG.TIMING.PULSE_SCALE;
+    ctx.save();
+    ctx.translate(core.x, core.y);
+    ctx.scale(pulse, pulse);
+    ctx.fillStyle = CONFIG.COLORS.CORE_FILL;
+    ctx.strokeStyle = CONFIG.COLORS.CORE_STROKE;
+    ctx.lineWidth = CONFIG.LINES.CORE_STROKE;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const ang = (Math.PI / 3) * i - Math.PI / 6;
+      const px = Math.cos(ang) * core.radius, py = Math.sin(ang) * core.radius;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    // in-world HP bar
+    const barW = CONFIG.HP_BARS.CORE_WIDTH;
+    const hpRatio = core.hp / core.maxHp;
+    ctx.fillStyle = CONFIG.COLORS.HP_BAR_BG;
+    ctx.fillRect(core.x - barW / 2, core.y - core.radius - CONFIG.HP_BARS.CORE_Y_OFFSET, barW, CONFIG.HP_BARS.CORE_HEIGHT);
+    ctx.fillStyle = hpRatio > CONFIG.HP_BARS.HEALTH_THRESHOLD ? CONFIG.COLORS.HP_BAR_GOOD : CONFIG.COLORS.HP_BAR_BAD;
+    ctx.fillRect(core.x - barW / 2, core.y - core.radius - CONFIG.HP_BARS.CORE_Y_OFFSET, barW * hpRatio, CONFIG.HP_BARS.CORE_HEIGHT);
+
+    ctx.fillStyle = CONFIG.COLORS.TEXT_PRIMARY;
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('TOWN CORE', core.x, core.y - core.radius - 20);
+  }
+
+  function drawForge(t) {
+    const f = state.forge;
+    const pulse = 1 + Math.sin(t * CONFIG.TIMING.PULSE_SPEED + CONFIG.TIMING.FORGE_PULSE_OFFSET) * CONFIG.TIMING.FORGE_PULSE_SCALE;
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    ctx.scale(pulse, pulse);
+    ctx.fillStyle = CONFIG.COLORS.FORGE_FILL;
+    ctx.strokeStyle = CONFIG.COLORS.FORGE_STROKE;
+    ctx.lineWidth = CONFIG.LINES.CORE_STROKE;
+    ctx.beginPath();
+    ctx.arc(0, 0, f.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // little flame mark
+    ctx.fillStyle = CONFIG.COLORS.FORGE_STROKE;
+    ctx.beginPath();
+    ctx.arc(0, -2, CONFIG.SIZES.FLAME_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = CONFIG.COLORS.TEXT_PRIMARY;
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('FORGE Lv.' + f.level, f.x, f.y - f.radius - 8);
+  }
+
+  function drawTowers(t) {
+    for (const tw of state.towers) {
+      const radius = CONFIG.SIZES.TOWER_RADIUS_BASE + tw.level * CONFIG.SIZES.TOWER_RADIUS_PER_LEVEL;
+      const pulse = 1 + Math.sin(t * CONFIG.TIMING.PULSE_SPEED + tw.x) * CONFIG.TIMING.PULSE_SCALE;
+
+      // range ring (subtle)
+      ctx.save();
+      ctx.strokeStyle = 'rgba(120,180,255,0.12)';
+      ctx.lineWidth = CONFIG.LINES.TOWER_RANGE_WIDTH;
+      ctx.beginPath();
+      ctx.arc(tw.x, tw.y, tw.range, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(tw.x, tw.y);
+      ctx.scale(pulse, pulse);
+      const colors = [CONFIG.COLORS.TOWER_LVL1, CONFIG.COLORS.TOWER_LVL2, CONFIG.COLORS.TOWER_LVL3];
+      ctx.fillStyle = colors[tw.level - 1] || colors[0];
+      ctx.strokeStyle = CONFIG.COLORS.TOWER_STROKE;
+      ctx.lineWidth = CONFIG.LINES.TOWER_STROKE;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      const pips = 'I'.repeat(tw.level);
+      ctx.fillStyle = CONFIG.COLORS.TEXT_PRIMARY;
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(pips, tw.x, tw.y - radius - 8);
+    }
+  }
+
+  function drawPlayer() {
+    const p = state.player;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+
+    // aim line
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = CONFIG.LINES.AIM_LINE_WIDTH;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(p.aimAngle) * p.radius, Math.sin(p.aimAngle) * p.radius);
+    ctx.lineTo(Math.cos(p.aimAngle) * (p.radius + 22), Math.sin(p.aimAngle) * (p.radius + 22));
+    ctx.stroke();
+
+    ctx.fillStyle = CONFIG.COLORS.PLAYER_FILL;
+    ctx.strokeStyle = CONFIG.COLORS.PLAYER_STROKE;
+    ctx.lineWidth = CONFIG.LINES.TOWER_STROKE;
+    ctx.beginPath();
+    ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // direction nub
+    ctx.fillStyle = CONFIG.COLORS.PLAYER_STROKE;
+    ctx.beginPath();
+    ctx.arc(Math.cos(p.aimAngle) * (p.radius - 4), Math.sin(p.aimAngle) * (p.radius - 4), 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawEnemies() {
+    for (const e of state.enemies) {
+      ctx.fillStyle = e.color;
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      const barW = e.radius * 2;
+      const hpRatio = Math.max(0, e.hp / e.maxHp);
+      ctx.fillStyle = CONFIG.COLORS.HP_BAR_BG;
+      ctx.fillRect(e.x - barW / 2, e.y - e.radius - CONFIG.HP_BARS.ENEMY_Y_OFFSET, barW, CONFIG.HP_BARS.ENEMY_HEIGHT);
+      ctx.fillStyle = CONFIG.COLORS.HP_BAR_BAD;
+      ctx.fillRect(e.x - barW / 2, e.y - e.radius - CONFIG.HP_BARS.ENEMY_Y_OFFSET, barW * hpRatio, CONFIG.HP_BARS.ENEMY_HEIGHT);
+    }
+  }
+
+  function drawProjectiles() {
+    for (const proj of state.projectiles) {
+      ctx.fillStyle = proj.owner === 'player' ? CONFIG.COLORS.PROJECTILE_PLAYER : CONFIG.COLORS.PROJECTILE_TOWER;
+      ctx.beginPath();
+      ctx.arc(proj.x, proj.y, proj.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawGoldDrops(t) {
+    for (const g of state.goldDrops) {
+      const bob = Math.sin(t * CONFIG.TIMING.BOB_SPEED + g.x) * CONFIG.TIMING.BOB_AMOUNT;
+      ctx.fillStyle = CONFIG.COLORS.GOLD_FILL;
+      ctx.strokeStyle = CONFIG.COLORS.GOLD_STROKE;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(g.x, g.y + bob, g.radius * CONFIG.SIZES.GOLD_VISUAL_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  function render(t) {
+    drawBackground();
+    drawGoldDrops(t);
+    drawCore(t);
+    drawForge(t);
+    drawTowers(t);
+    drawEnemies();
+    drawProjectiles();
+    drawPlayer();
+  }
+
+  // ===================== HUD sync =====================
+  const goldValEl = document.getElementById('goldVal');
+  const timerValEl = document.getElementById('timerVal');
+  const coreHpFillEl = document.getElementById('coreHpFill');
+
+  function syncHud() {
+    goldValEl.textContent = state.gold;
+    timerValEl.textContent = formatTime(WIN_TIME - state.elapsed);
+    const ratio = clamp(state.townCore.hp / state.townCore.maxHp, 0, 1);
+    coreHpFillEl.style.width = (ratio * 100) + '%';
+  }
+
+  // ===================== 9/10. GAME LOOP + WIN/LOSE =====================
+  function endGame(won) {
+    state.status = won ? 'won' : 'lost';
+    const title = document.getElementById('endTitle');
+    title.textContent = won ? 'Village Saved!' : 'The Village Has Fallen';
+    title.className = won ? 'won' : 'lost';
+    document.getElementById('statTime').textContent = formatTime(state.elapsed);
+    document.getElementById('statKills').textContent = state.kills;
+    document.getElementById('statGold').textContent = state.goldEarned;
+    document.getElementById('endScreen').classList.remove('hidden');
+  }
+
+  function update(dt) {
+    if (state.status !== 'playing') return;
+
+    state.elapsed += dt;
+
+    if (state.elapsed >= WIN_TIME) { endGame(true); return; }
+    if (state.townCore.hp <= 0) { endGame(false); return; }
+
+    updatePlayer(dt);
+    updateSpawning(dt);
+    updateEnemies(dt);
+    updateProjectiles(dt);
+    updateTowers(dt);
+    updateGoldPickups();
+  }
+
+  let lastTime = null;
+  function loop(now) {
+    if (lastTime === null) lastTime = now;
+    let dt = (now - lastTime) / 1000;
+    // Clamp dt to prevent frame jumps when tab is backgrounded; limits to max 50ms per frame
+    dt = Math.min(dt, 0.05);
+    lastTime = now;
+
+    update(dt);
+    render(now / 1000);
+    syncHud();
+
+    requestAnimationFrame(loop);
+  }
+
+  // ===================== 11. INIT / BOOTSTRAP =====================
+  document.getElementById('restartBtn').addEventListener('click', resetGame);
+
+  function resetGame() {
+    state = createInitialState();
+    document.getElementById('endScreen').classList.add('hidden');
+    legendDismissed = false;
+    document.getElementById('legend').classList.remove('faded');
+    setTimeout(dismissLegend, 7000);
+  }
+
+  resetGame();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
